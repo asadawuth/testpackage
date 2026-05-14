@@ -1,0 +1,87 @@
+name: userpackage
+version: "2"
+
+services:
+  # ── PostgreSQL Database ─────────────────────────────
+  postgres:
+    image: postgres:17-alpine
+    container_name: nestjs-postgres
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${DB_NAME}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  # ── NestJS Backend ─────────────────────────────
+  app:
+    build:
+      context: ./Be
+      target: development
+    container_name: nestjs-dev
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./Be:/app
+      - /app/node_modules
+    env_file:
+      - ./Be/.env
+    environment:
+      - NODE_ENV=development
+      - WATCHPACK_POLLING=true
+      - CHOKIDAR_USEPOLLING=true
+      - CHOKIDAR_INTERVAL=1000
+      - DB_HOST=postgres
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+    stdin_open: true
+    tty: true
+
+  # ── Frontend (React Vite) ─────────────────────────────
+  frontend:
+    build:
+      context: ./Fn
+    container_name: react-vite-dev
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./Fn:/app
+      - /app/node_modules
+    environment:
+      - CHOKIDAR_USEPOLLING=true
+      - VITE_API_URL=http://localhost:3000
+    command: npm run dev -- --host 0.0.0.0
+    depends_on:
+      - app
+    restart: unless-stopped
+
+  # ── pgAdmin ─────────────────────────────
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: nestjs-pgadmin
+    ports:
+      - "5050:80"
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD}
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  pgadmin_data:
