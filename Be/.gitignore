@@ -24,6 +24,7 @@ coverage/
 .env
 .env.*
 !.env.example
+!/Be/.env
 
 # temp
 .temp/
